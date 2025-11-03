@@ -1,5 +1,5 @@
 module BenchmarkHelpers
-  Result = Data.define(:queries, :overall_time, :profile)
+  InstrumentationResult = Data.define(:queries, :overall_time, :profile)
 
   def instrument(&block)
     queries = []
@@ -16,6 +16,6 @@ module BenchmarkHelpers
       end
     end
 
-    Result.new(queries, time, profile_data)
+    InstrumentationResult.new(queries, time, profile_data)
   end
 end
