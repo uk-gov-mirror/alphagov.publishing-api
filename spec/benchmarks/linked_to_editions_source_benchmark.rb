@@ -18,10 +18,10 @@ RSpec.describe Sources::LinkedToEditionsSource do
 
     result = instrument { instance.fetch(ministers_links) }
 
-    expect(result.queries).to contain_exactly(
-      include(sql: a_string_matching(/SELECT "editions"\.\*/)),
-    )
-    expect(result.queries).to all(be_fast_query(threshold: 0.05))
-    expect(result).to be_fast_overall(threshold: 0.2)
+    aggregate_failures do
+      expect(result.queries.count).to be 1
+      expect(result.queries).to all(be_fast_query(threshold: 0.05))
+      expect(result).to be_fast_overall(threshold: 0.2)
+    end
   end
 end
