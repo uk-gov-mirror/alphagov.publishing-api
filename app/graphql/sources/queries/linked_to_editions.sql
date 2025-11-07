@@ -1,5 +1,5 @@
 -- linked_to_editions
-WITH link_set_linked_editions AS (
+WITH edition_linked_editions AS (
   SELECT DISTINCT ON (links.id)
     editions.*,
     links.link_type,
@@ -7,37 +7,7 @@ WITH link_set_linked_editions AS (
     links.id AS link_id,
     documents.content_id,
     documents.locale,
-    links.link_set_content_id AS source_content_id
-  FROM editions
-  INNER JOIN documents ON editions.document_id = documents.id
-  INNER JOIN links ON documents.content_id = links.target_content_id
-  WHERE
-    (
-      (links.link_set_content_id, links.link_type) IN (:content_id_tuples)
-    )
-    AND editions.content_store =:content_store
-    AND documents.locale IN (:locale_with_fallback)
-    AND editions.document_type NOT IN (:non_renderable_formats)
-    AND (
-      links.link_type IN (:unpublished_link_types)
-      OR editions.state != 'unpublished'
-    )
-  ORDER BY links.id, (
-    CASE
-      WHEN (documents.locale =:primary_locale) THEN 0
-      ELSE 1
-    END
-  )
-),
-
-edition_linked_editions AS (
-  SELECT DISTINCT ON (links.id)
-    editions.*,
-    links.link_type,
-    links.position,
-    links.id AS link_id,
-    documents.content_id,
-    documents.locale,
+    documents.locale =:primary_locale AS is_primary_locale,
     source_documents.content_id AS source_content_id
   FROM editions
   INNER JOIN documents ON editions.document_id = documents.id
@@ -47,42 +17,53 @@ edition_linked_editions AS (
   WHERE
     ((source_editions.id, links.link_type) IN (:edition_id_tuples))
     AND editions.content_store =:content_store
-    AND documents.locale IN (:locale_with_fallback)
+    AND documents.locale IN (:primary_locale,:secondary_locale)
     AND editions.document_type NOT IN (:non_renderable_formats)
     AND (
       links.link_type IN (:unpublished_link_types)
       OR editions.state != 'unpublished'
     )
-  ORDER BY links.id, (
-    CASE
-      WHEN (documents.locale =:primary_locale) THEN 0
-      ELSE 1
-    END
-  )
+  ORDER BY links.id ASC, is_primary_locale DESC
 ),
 
--- Get the types of the edition_linked_editions
-edition_link_types AS (
+edition_links AS (
   SELECT DISTINCT
     source_content_id,
     link_type
   FROM edition_linked_editions
 ),
 
--- Exclude links of those types from the link_set_linked_editions
-intact_link_set_linked_editions AS (
-  SELECT link_set_linked_editions.*
-  FROM link_set_linked_editions
-  LEFT JOIN edition_link_types
-    ON (
-      link_set_linked_editions.source_content_id = edition_link_types.source_content_id
-      AND link_set_linked_editions.link_type = edition_link_types.link_type
+link_set_linked_editions AS (
+  SELECT DISTINCT ON (links.id)
+    editions.*,
+    links.link_type,
+    links.position,
+    links.id AS link_id,
+    documents.content_id,
+    documents.locale,
+    documents.locale =:primary_locale AS is_primary_locale,
+    links.link_set_content_id AS source_content_id
+  FROM editions
+  INNER JOIN documents ON editions.document_id = documents.id
+  INNER JOIN links ON documents.content_id = links.target_content_id
+  WHERE
+    (
+      (links.link_set_content_id, links.link_type) IN (:content_id_tuples)
     )
-  WHERE edition_link_types.link_type IS NULL
+    AND editions.content_store =:content_store
+    AND documents.locale IN (:primary_locale,:secondary_locale)
+    AND editions.document_type NOT IN (:non_renderable_formats)
+    AND (
+      links.link_type IN (:unpublished_link_types)
+      OR editions.state != 'unpublished'
+    )
+    -- skip any links that we already found in edition_links:
+    AND (links.link_set_content_id, links.link_type) NOT IN (SELECT edition_links.* FROM edition_links)
+  ORDER BY links.id ASC, is_primary_locale DESC
 )
 
 SELECT editions.* FROM (
-  SELECT * FROM intact_link_set_linked_editions
+  SELECT * FROM link_set_linked_editions
   UNION ALL
   SELECT * FROM edition_linked_editions
 ) AS editions
