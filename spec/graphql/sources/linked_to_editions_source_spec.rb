@@ -1,17 +1,23 @@
 RSpec.describe Sources::LinkedToEditionsSource do
   context "when there is a mix of link set links and edition links" do
-    it "returns a mixture of links" do
+    it "returns only the edition links" do
       target_edition_1 = create(:edition, title: "edition 1, test link, edition link")
       target_edition_2 = create(:edition, title: "edition 2, another link type, edition link")
       target_edition_3 = create(:edition, title: "edition 3, test link, link set link")
+      target_edition_4 = create(:edition, title: "edition 4, test link, link set link")
+      target_edition_5 = create(:edition, title: "edition 5, test link, edition link")
+      target_edition_6 = create(:edition, title: "edition 6, test link, edition link")
 
       source_edition = create(:edition,
                               edition_links: [
                                 { link_type: "test_link", target_content_id: target_edition_1.content_id },
                                 { link_type: "another_link_type", target_content_id: target_edition_2.content_id },
+                                { link_type: "test_link", target_content_id: target_edition_5.content_id },
+                                { link_type: "test_link", target_content_id: target_edition_6.content_id },
                               ],
                               link_set_links: [
                                 { link_type: "test_link", target_content_id: target_edition_3.content_id },
+                                { link_type: "test_link", target_content_id: target_edition_4.content_id },
                               ])
 
       GraphQL::Dataloader.with_dataloading do |dataloader|
@@ -22,31 +28,8 @@ RSpec.describe Sources::LinkedToEditionsSource do
         ).request([source_edition, "test_link"])
 
         actual_titles = request.load.map(&:title)
-        expected_titles = [target_edition_1, target_edition_3].map(&:title)
+        expected_titles = [target_edition_1, target_edition_5, target_edition_6].map(&:title)
         expect(actual_titles).to match_array(expected_titles)
-      end
-    end
-
-    context "when the same document is both a link set link and an edition link" do
-      it "only returns the document once" do
-        target_edition = create(:live_edition)
-        source_edition = create(:live_edition,
-                                edition_links: [
-                                  { link_type: "test_link", target_content_id: target_edition.content_id },
-                                ],
-                                link_set_links: [
-                                  { link_type: "test_link", target_content_id: target_edition.content_id },
-                                ])
-
-        GraphQL::Dataloader.with_dataloading do |dataloader|
-          request = dataloader.with(
-            described_class,
-            content_store: source_edition.content_store,
-            locale: "en",
-          ).request([source_edition, "test_link"])
-
-          expect(request.load).to eq([target_edition])
-        end
       end
     end
   end
