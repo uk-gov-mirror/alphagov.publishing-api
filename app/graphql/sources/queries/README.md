@@ -119,12 +119,12 @@ ORDER BY content_id, is_primary_locale DESC
 This returns the best single document for each content_id - `content 1` and `content 2` have English editions in
 this example, while `content 3` only has a French edition.
 
-### WHERE (content_id, link_type) NOT IN (SELECT DISTINCT ...)
+### NOT EXISTS (SELECT ...)
 
 If a source document has both LinkSet links and Edition links for the same link type, we're only interested in the
 Edition links.
 
-To skip any LinkSet links that we've already seen in the edition links, we use this `NOT IN` approach.
+To skip any LinkSet links that we've already seen in the edition links, we use this `NOT EXISTS` approach.
 
 ```sql
 WITH edition_links AS (
@@ -141,7 +141,12 @@ link_set_links AS (
     ('content 2', 'person'),
     ('content 2', 'role')
   ) AS documents(content_id, link_type)
-  WHERE (content_id, link_type) NOT IN (SELECT DISTINCT content_id, link_type FROM edition_links)
+  WHERE NOT EXISTS (
+    SELECT FROM edition_links
+    WHERE
+      documents.content_id = edition_links.content_id
+      AND documents.link_type = edition_links.link_type
+  )
 )
 
 SELECT * FROM link_set_links
