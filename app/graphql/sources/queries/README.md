@@ -55,6 +55,42 @@ SELECT * FROM documents
 
 Here we create a CTE called documents with some hardcoded values, and then `SELECT *` from the CTE.
 
+### json_to_recordset
+
+ActiveRecord doesn't provide a way to pass complex types as bind parameters (e.g. in
+`Edition.find_by_sql([SQL, bind_parameters])`). Instead, we pass complex types to the query as JSON strings, and then
+use the `json_to_recordset` SQL function to turn them into sets of records:
+
+```sql
+WITH query_input AS (
+  SELECT query_input.*
+  FROM
+    json_to_recordset($$
+    [
+      {"edition_id": 1, "content_id": "00000000-0000-0000-0000-000000000000", "link_type": "foo"},
+      {"edition_id": 2, "content_id": "00000000-0000-0000-0000-000000000001", "link_type": "foo"},
+      {"edition_id": 3, "content_id": "00000000-0000-0000-0000-000000000002", "link_type": "foo"}
+    ]
+    $$::json) AS query_input (
+      edition_id integer,
+      content_id uuid,
+      link_type varchar
+    )
+  LIMIT (3)
+)
+
+SELECT * FROM query_input
+```
+
+| edition\_id | content\_id | link\_type |
+| :--- | :--- | :--- |
+| 1 | 00000000-0000-0000-0000-000000000000 | foo |
+| 2 | 00000000-0000-0000-0000-000000000001 | foo |
+| 3 | 00000000-0000-0000-0000-000000000002 | foo |
+
+Adding a `LIMIT` to the query helps the query planner work out how many records will be in the result, which results in
+more accurate query plans. Without `LIMIT`, the postgres planner assumes that `json_to_recordset` will return 100 rows.
+
 ### ORDER BY boolean DESC
 
 In our queries, we have a "primary" locale and a "secondary" locale. We want to find the documents with the "best"
